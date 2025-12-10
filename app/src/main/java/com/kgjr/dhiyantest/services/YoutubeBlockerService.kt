@@ -2,7 +2,6 @@ package com.kgjr.dhiyantest.services
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -13,6 +12,7 @@ class YoutubeBlockerService : AccessibilityService() {
 
     companion object {
         var isOverlayShowing = false
+        const val ENABLE_LOGS = false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -20,12 +20,8 @@ class YoutubeBlockerService : AccessibilityService() {
         val rootNode = rootInActiveWindow ?: return
         val packageName = rootNode.packageName?.toString() ?: return
 
-        // SUPPORTED APPS (add more anytime)
         val supportedApps = setOf(
             "com.google.android.youtube",   // YouTube Shorts
-            "com.instagram.android",       // Instagram Reels
-            "com.zhiliaoapp.musically",    // TikTok (global)
-            "com.ss.android.ugc.trill",    // TikTok (some regions)
             "com.chrome.beta",             // Chrome (for testing Shorts in browser)
             "com.android.chrome"           // Chrome stable
         )
@@ -34,17 +30,12 @@ class YoutubeBlockerService : AccessibilityService() {
         if (packageName !in supportedApps) {
             if (isOverlayShowing) {
 //            stopService(Intent(this, SimpleOverlayService::class.java))
-
                 isOverlayShowing = false
 
             }
             return
         }
 
-        // ——————— YOUTUBE IS OPEN → LOG + DETECT SHORTS ———————
-        Log.d("YoutubeBlocker", "YOUTUBE DETECTED")
-
-        // 1. Collect ALL text once (for logs + detection)
         val allText = StringBuilder().apply {
             fun collect(node: AccessibilityNodeInfo?) {
                 if (node == null) return
@@ -55,9 +46,6 @@ class YoutubeBlockerService : AccessibilityService() {
             collect(rootNode)
         }.toString()
 
-        Log.d("YoutubeBlocker", "All Text: $allText")
-
-        // 2. Video player size (for debugging)
         rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/player_view")
             .firstOrNull()?.let {
                 val rect = Rect()
@@ -65,30 +53,37 @@ class YoutubeBlockerService : AccessibilityService() {
                 Log.d("YoutubeBlocker", "Video Player Size: ${rect.width()}x${rect.height()}")
             }
 
-        // 3. Node count
-        Log.d("YoutubeBlocker", "Total Nodes: ${rootNode.childCount}")
+        val hasShortsRootView = rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/reel_watch_fragment_root")
+            .isNotEmpty()
 
-        // ——————— PERFECT SHORTS DETECTION (NEVER FAILS) ———————
-        val isShorts = allText.contains("Remix this Short") ||
+        val hasReelActionsContainer = rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/reel_actions_container")
+            .isNotEmpty()
+
+        val hasShortsText = allText.contains("Remix this Short") ||
                 allText.contains("See more videos using this sound") ||
                 (allText.contains("Remix") && allText.contains("sound", ignoreCase = true))
+        val isShorts = hasShortsRootView || hasReelActionsContainer || hasShortsText
 
-        Log.d("YoutubeBlocker", "IS SHORTS SCREEN? → $isShorts")
+        logYoutubeDebugInfo(
+            className = event.className.toString(),
+            allText = allText,
+            rootNode = rootNode,
+            hasShortsRootView = hasShortsRootView,
+            hasReelActionsContainer = hasReelActionsContainer,
+            hasShortsText = hasShortsText,
+            isShorts = isShorts
+        )
 
-        // ——————— BLOCK ONLY SHORTS ———————
         if (isShorts && !isOverlayShowing) {
-            Log.d("YoutubeBlocker", "BLOCKING SHORTS!")
 //            startService(Intent(this, SimpleOverlayService::class.java))
             performGlobalAction(GLOBAL_ACTION_BACK)
             isOverlayShowing = true
         }
         else if (!isShorts && isOverlayShowing) {
-            Log.d("YoutubeBlocker", "UNBLOCKED – Not Shorts")
 //            stopService(Intent(this, SimpleOverlayService::class.java))
             isOverlayShowing = false
         }
 
-        Log.d("YoutubeBlocker", "END YOUTUBE\n")
     }
 
     override fun onInterrupt() {
@@ -96,5 +91,40 @@ class YoutubeBlockerService : AccessibilityService() {
 //            stopService(Intent(this, SimpleOverlayService::class.java))
             isOverlayShowing = false
         }
+    }
+    private fun logYoutubeDebugInfo(
+        className: String,
+        allText: String,
+        rootNode: AccessibilityNodeInfo,
+        hasShortsRootView: Boolean,
+        hasReelActionsContainer: Boolean,
+        hasShortsText: Boolean,
+        isShorts: Boolean
+    ) {
+        if (!ENABLE_LOGS) return // Disable logs globally
+
+        Log.d("YouTubeBlocker", "-------------------------------------")
+        Log.d("YouTubeBlocker", "YOUTUBE DETECTED")
+        Log.d("YouTubeBlocker", "Class Name: $className")
+
+        // Log all collected text
+        Log.d("YouTubeBlocker", "All Text: $allText")
+
+        // Log player size
+        rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/player_view")
+            .firstOrNull()?.let {
+                val rect = Rect()
+                it.getBoundsInScreen(rect)
+                Log.d("YouTubeBlocker", "Video Player Size: ${rect.width()}x${rect.height()}")
+            }
+
+        Log.d("YouTubeBlocker", "Total Nodes: ${rootNode.childCount}")
+
+        // Shorts detection logs
+        Log.d("YouTubeBlocker", "Has Shorts Root View: $hasShortsRootView")
+        Log.d("YouTubeBlocker", "Has Reel Actions Container: $hasReelActionsContainer")
+        Log.d("YouTubeBlocker", "Has Shorts Text: $hasShortsText")
+        Log.d("YouTubeBlocker", "IS SHORTS SCREEN? → $isShorts")
+        Log.d("YouTubeBlocker", "-------------------------------------\n")
     }
 }
