@@ -2,10 +2,16 @@ package com.kgjr.dhiyantest.services
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.coroutines.coroutineContext
 
 @SuppressLint("AccessibilityPolicy")
 class YoutubeBlockerService : AccessibilityService() {
@@ -30,7 +36,7 @@ class YoutubeBlockerService : AccessibilityService() {
         if (packageName !in supportedApps) {
             if (isOverlayShowing) {
 //            stopService(Intent(this, SimpleOverlayService::class.java))
-                isOverlayShowing = false
+//                isOverlayShowing = false
 
             }
             return
@@ -75,20 +81,26 @@ class YoutubeBlockerService : AccessibilityService() {
         )
 
         if (isShorts && !isOverlayShowing) {
-//            startService(Intent(this, SimpleOverlayService::class.java))
-            performGlobalAction(GLOBAL_ACTION_BACK)
             isOverlayShowing = true
+            startService(Intent(this, SimpleOverlayService::class.java))
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            CoroutineScope(Dispatchers.Main).launch {
+                delay(3000)
+                stopService(Intent(this@YoutubeBlockerService, SimpleOverlayService::class.java))
+                isOverlayShowing = false
+
+            }
         }
         else if (!isShorts && isOverlayShowing) {
 //            stopService(Intent(this, SimpleOverlayService::class.java))
-            isOverlayShowing = false
+//            isOverlayShowing = false
         }
 
     }
 
     override fun onInterrupt() {
         if (isOverlayShowing) {
-//            stopService(Intent(this, SimpleOverlayService::class.java))
+            stopService(Intent(this, SimpleOverlayService::class.java))
             isOverlayShowing = false
         }
     }
