@@ -104,6 +104,10 @@ class YoutubeBlockerService : AccessibilityService() {
             isOverlayShowing = false
         }
     }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+    }
     private fun logYoutubeDebugInfo(
         className: String,
         allText: String,
